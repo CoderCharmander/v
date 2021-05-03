@@ -217,7 +217,10 @@ fn (mut g Gen) comp_if(node ast.IfExpr) {
 	} else {
 		''
 	}
-	mut comp_if_stmts_skip := false
+	mut comp_if_stmts_skip := false // don't write any statements if the condition is false
+	// (so that for example windows calls don't get generated inside `$if macos` which
+	// will lead to compilation errors)
+
 	for i, branch in node.branches {
 		start_pos := g.out.len
 		if i == node.branches.len - 1 && node.has_else {
@@ -310,7 +313,24 @@ fn (mut g Gen) comp_if_cond(cond ast.Expr) bool {
 					mut name := ''
 					mut exp_type := ast.Type(0)
 					got_type := (cond.right as ast.TypeNode).typ
-					if left is ast.SelectorExpr {
+					// Handle `$if x is Interface {`
+					mut matches_interface := 'false'
+					if left is ast.Ident && cond.right is ast.TypeNode {
+						interface_sym := g.table.get_type_symbol(got_type)
+						if interface_sym.info is ast.Interface {
+							q := g.table.get_type_symbol(interface_sym.info.types[0])
+							is_true := true // exp_type in interface_sym.info.types
+							if cond.op == .key_is {
+								g.write('1')
+								return is_true
+							} else if cond.op == .not_is {
+								g.write('0')
+								return !is_true
+							}
+							// matches_interface = '/*iface:$got_type $exp_type*/ true'
+							//}
+						}
+					} else if left is ast.SelectorExpr {
 						name = '${left.expr}.$left.field_name'
 						exp_type = g.comptime_var_type_map[name]
 					} else if left is ast.TypeNode {
@@ -320,10 +340,10 @@ fn (mut g Gen) comp_if_cond(cond ast.Expr) bool {
 					}
 
 					if cond.op == .key_is {
-						g.write('$exp_type == $got_type')
+						g.write('$exp_type == $got_type || $matches_interface')
 						return exp_type == got_type
 					} else {
-						g.write('$exp_type !=$got_type')
+						g.write('$exp_type != $got_type && !($matches_interface)')
 						return exp_type != got_type
 					}
 				}

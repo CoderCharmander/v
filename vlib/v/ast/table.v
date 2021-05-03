@@ -28,6 +28,7 @@ pub mut:
 	panic_handler    FnPanicHandler = default_table_panic_handler
 	panic_userdata   voidptr        = voidptr(0) // can be used to pass arbitrary data to panic_handler;
 	panic_npanics    int
+	cur_fn           &FnDecl // previously stored in Checker.cur_fn and Gen.cur_fn
 }
 
 [unsafe]
@@ -151,6 +152,7 @@ mut:
 pub fn new_table() &Table {
 	mut t := &Table{
 		type_symbols: []TypeSymbol{cap: 64000}
+		cur_fn: 0
 	}
 	t.register_builtin_type_symbols()
 	t.is_fmt = true
